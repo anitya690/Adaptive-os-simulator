@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adaptive Resource Allocation — OS Simulator</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+
+<!-- Chart.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<!-- Our Stylesheet -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+<!-- ====== HEADER ====== -->
+<div class="header">
+  <div class="logo-row">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <path d="M8 21h8M12 17v4"/>
+        <path d="M7 8h2m2 0h2m2 0h2" stroke-linecap="round"/>
+        <path d="M7 12h4" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="header-title">
+      <h1>ADAPTIVE&nbsp;RESOURCE&nbsp;ALLOCATION</h1>
+      <p>MULTIPROGRAMMING OS SIMULATOR — CPU · MEMORY · SCHEDULING</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="tick-display">TICK&nbsp;<span id="tick-display">000</span></div>
+    <div class="sim-status">
+      <div class="pulse" id="pulse-dot"></div>
+      <span id="sim-label">STOPPED</span>
+    </div>
+    <button class="btn btn-start" id="btn-run" onclick="toggleSim()">▶ START</button>
+    <button class="btn btn-reset" onclick="resetAll()">⟳ RESET</button>
+  </div>
+</div>
+
+<!-- ====== NAV ====== -->
+<div class="nav">
+  <button class="nav-btn active" onclick="gotoTab('overview')">⬡ OVERVIEW</button>
+  <button class="nav-btn" onclick="gotoTab('processes')">⬡ PROCESSES</button>
+  <button class="nav-btn" onclick="gotoTab('gantt')">⬡ GANTT</button>
+  <button class="nav-btn" onclick="gotoTab('memory')">⬡ MEMORY MAP</button>
+  <button class="nav-btn" onclick="gotoTab('settings')">⬡ SETTINGS</button>
+</div>
+
+<!-- ====== TAB: OVERVIEW ====== -->
+<div id="tab-overview" class="tab-pane active">
+
+  <div class="alert hidden" id="alert-box">
+    <span class="alert-icon">⚠</span>
+    <span id="alert-msg">Bottleneck detected</span>
+  </div>
+
+  <!-- Metric Cards -->
+  <div class="metrics-row">
+    <div class="mcard">
+      <div class="mcard-corner"></div>
+      <div class="mcard-label">CPU Utilization</div>
+      <div class="mcard-val" id="m-cpu" style="color:var(--cyan)">0%</div>
+      <div class="mcard-sub" id="m-cpu-sub">Idle</div>
+      <div class="mcard-bar" style="background:linear-gradient(90deg,var(--cyan),var(--blue))"></div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-corner"></div>
+      <div class="mcard-label">Memory Used</div>
+      <div class="mcard-val" id="m-mem" style="color:var(--green)">0 MB</div>
+      <div class="mcard-sub" id="m-mem-sub">of 1024 MB</div>
+      <div class="mcard-bar" style="background:linear-gradient(90deg,var(--green),var(--cyan-d))"></div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-corner"></div>
+      <div class="mcard-label">Active Processes</div>
+      <div class="mcard-val" id="m-procs" style="color:var(--purple)">0</div>
+      <div class="mcard-sub" id="m-procs-sub">0 ready · 0 blocked</div>
+      <div class="mcard-bar" style="background:linear-gradient(90deg,var(--purple),var(--pink))"></div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-corner"></div>
+      <div class="mcard-label">Throughput</div>
+      <div class="mcard-val" id="m-tput" style="color:var(--amber)">0</div>
+      <div class="mcard-sub">completed / tick</div>
+      <div class="mcard-bar" style="background:linear-gradient(90deg,var(--amber),var(--red))"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">CPU &amp; Memory Trend</div>
+      <div style="position:relative;height:160px"><canvas id="trend-chart"></canvas></div>
+      <div class="legend-row" style="margin-top:10px">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>CPU %</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>Memory %</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span>Blocked %</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Process State Distribution</div>
+      <div style="position:relative;height:160px"><canvas id="state-chart"></canvas></div>
+      <div class="legend-row" style="margin-top:10px;justify-content:center">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>Running</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>Ready</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>Blocked</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--text-dim)"></span>Done</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Running Processes -->
+  <div class="card stack" style="margin-bottom:12px">
+    <div class="card-title">Running Processes</div>
+    <div id="proc-list">
+      <div style="font-size:11px;color:var(--text-dim);padding:.5rem 0">No processes. Go to Settings to add processes.</div>
+    </div>
+  </div>
+
+  <!-- System Log -->
+  <div class="card">
+    <div class="card-title">System Log</div>
+    <div class="log-box" id="sys-log"></div>
+  </div>
+
+</div><!-- /tab-overview -->
+
+<!-- ====== TAB: PROCESSES ====== -->
+<div id="tab-processes" class="tab-pane">
+  <div class="card">
+    <div class="card-title">All Processes</div>
+    <div class="proc-table-wrap">
+      <table class="ptable" id="proc-table">
+        <thead>
+          <tr>
+            <th style="width:36px">PID</th>
+            <th style="width:90px">Name</th>
+            <th style="width:60px">Type</th>
+            <th style="width:76px">State</th>
+            <th style="width:64px">CPU Left</th>
+            <th style="width:64px">Memory</th>
+            <th style="width:58px">Priority</th>
+            <th style="width:60px">Wait</th>
+            <th style="width:65px">MLFQ Lvl</th>
+            <th style="width:70px">CPU Used</th>
+          </tr>
+        </thead>
+        <tbody id="proc-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- /tab-processes -->
+
+<!-- ====== TAB: GANTT ====== -->
+<div id="tab-gantt" class="tab-pane">
+  <div class="card">
+    <div class="card-title">Gantt Chart — Last 24 Ticks</div>
+    <div class="gantt-wrap">
+      <div id="gantt-area">
+        <div style="font-size:11px;color:var(--text-dim);padding:.5rem 0">Start simulation to generate Gantt data.</div>
+      </div>
+    </div>
+    <div class="legend-row" style="margin-top:12px" id="gantt-legend"></div>
+  </div>
+</div><!-- /tab-gantt -->
+
+<!-- ====== TAB: MEMORY MAP ====== -->
+<div id="tab-memory" class="tab-pane">
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-title">Memory Allocation — 1024 MB</div>
+    <div class="mem-bar" id="mem-bar">
+      <div class="mem-free">FREE — 1024 MB</div>
+    </div>
+    <div class="legend-row" id="mem-legend"></div>
+  </div>
+  <div class="three-col">
+    <div class="mcard">
+      <div class="mcard-label">Used</div>
+      <div class="mcard-val" id="mm-used" style="color:var(--cyan);font-size:22px">0 MB</div>
+      <div class="mcard-bar" style="background:var(--cyan)"></div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-label">Free</div>
+      <div class="mcard-val" id="mm-free" style="color:var(--green);font-size:22px">1024 MB</div>
+      <div class="mcard-bar" style="background:var(--green)"></div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-label">Fragmentation</div>
+      <div class="mcard-val" id="mm-frag" style="color:var(--amber);font-size:22px">0%</div>
+      <div class="mcard-bar" style="background:var(--amber)"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Per-Process Memory</div>
+    <div id="mem-proc-list">
+      <div style="font-size:11px;color:var(--text-dim);padding:.5rem 0">No active processes.</div>
+    </div>
+  </div>
+</div><!-- /tab-memory -->
+
+<!-- ====== TAB: SETTINGS ====== -->
+<div id="tab-settings" class="tab-pane">
+  <div class="settings-layout">
+
+    <!-- Scheduling Policy -->
+    <div class="card">
+      <div class="card-title">Scheduling &amp; Memory Policy</div>
+
+      <div class="form-group">
+        <div class="form-label">CPU Scheduling Algorithm</div>
+        <div class="policy-row" id="cpu-policy-row">
+          <button class="pill on" onclick="setPol('RR',this)">Round Robin</button>
+          <button class="pill" onclick="setPol('SJF',this)">Shortest Job First</button>
+          <button class="pill" onclick="setPol('PRIORITY',this)">Priority</button>
+          <button class="pill" onclick="setPol('FCFS',this)">FCFS</button>
+          <button class="pill" onclick="setPol('MLFQ',this)">MLFQ</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Memory Allocation Policy</div>
+        <div class="policy-row" id="mem-policy-row">
+          <button class="pill on" onclick="setMem('FF',this)">First Fit</button>
+          <button class="pill" onclick="setMem('BF',this)">Best Fit</button>
+          <button class="pill" onclick="setMem('WF',this)">Worst Fit</button>
+        </div>
+      </div>
+
+      <div class="sl-row">
+        <span class="sl-label">Time Quantum</span>
+        <input type="range" min="1" max="20" step="1" value="4"
+          oninput="quantum=+this.value;document.getElementById('q-val').textContent=this.value">
+        <span class="sl-val" id="q-val">4</span>
+      </div>
+      <div class="sl-row">
+        <span class="sl-label">Sim Speed (ms)</span>
+        <input type="range" min="200" max="2000" step="100" value="800"
+          oninput="tickMs=+this.value;document.getElementById('s-val').textContent=this.value">
+        <span class="sl-val" id="s-val">800</span>
+      </div>
+      <div class="sl-row">
+        <span class="sl-label">Aging Threshold</span>
+        <input type="range" min="2" max="20" step="1" value="6"
+          oninput="agingThresh=+this.value;document.getElementById('a-val').textContent=this.value">
+        <span class="sl-val" id="a-val">6</span>
+      </div>
+    </div>
+
+    <!-- Add Process -->
+    <div class="card">
+      <div class="card-title">Add a Process</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" id="p-name" placeholder="Process name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select id="p-type">
+            <option value="CPU">CPU-bound</option>
+            <option value="IO">I/O-bound</option>
+            <option value="MIX" selected>Mixed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CPU Burst (ms)</label>
+          <input type="number" id="p-burst" value="30" min="1" max="200">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Memory (MB)</label>
+          <input type="number" id="p-mem" value="64" min="8" max="256">
+        </div>
+      </div>
+      <div class="sl-row" style="margin-bottom:.5rem">
+        <span class="sl-label">Priority (1–10)</span>
+        <input type="range" min="1" max="10" step="1" value="5"
+          oninput="document.getElementById('pri-v').textContent=this.value" id="p-pri">
+        <span class="sl-val" id="pri-v">5</span>
+      </div>
+      <div class="sl-row" style="margin-bottom:1rem">
+        <span class="sl-label">I/O Freq (1–10)</span>
+        <input type="range" min="1" max="10" step="1" value="5"
+          oninput="document.getElementById('io-v').textContent=this.value" id="p-io">
+        <span class="sl-val" id="io-v">5</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-add" style="flex:1" onclick="addProc()">+ ADD PROCESS</button>
+        <button class="btn" onclick="loadPresets()" style="white-space:nowrap">Load Presets</button>
+      </div>
+      <div id="add-msg" style="font-size:10px;margin-top:8px;letter-spacing:0.04em;min-height:16px"></div>
+    </div>
+
+  </div>
+</div><!-- /tab-settings -->
+
+</div><!-- /app -->
+
+<!-- Our Script (loaded last so DOM is ready) -->
+<script src="script.js"></script>
+</body>
+</html>
